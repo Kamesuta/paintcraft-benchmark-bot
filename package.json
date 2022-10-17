@@ -18,16 +18,20 @@
     "dist/"
   ],
   "scripts": {
+    "prepare": "husky install",
     "build": "npm run lint && tsc",
+    "start": "node dist/index.js",
     "lint": "eslint --ext .ts --fix src/**/*.ts",
     "fmt": "prettier --write src/**/*.ts",
-    "start": "node dist/index.js"
+    "lint-staged": "lint-staged"
   },
   "devDependencies": {
     "@types/node": "^18.7.18",
     "@typescript-eslint/eslint-plugin": "^5.3.0",
     "@typescript-eslint/parser": "^5.3.0",
     "eslint": "^8.2.0",
+    "husky": "^8.0.1",
+    "lint-staged": "^13.0.3",
     "prettier": "^2.7.1",
     "source-map-support": "^0.5.12",
     "ts-node": "^10.0.0",
@@ -35,5 +39,10 @@
   },
   "dependencies": {
     "mineflayer": "github:PrismarineJS/mineflayer#2c6a403"
+  },
+  "lint-staged": {
+    "src/**/*.{js,ts}": "eslint --cache --fix",
+    "src/**": "prettier --write",
+    "src/**/*.ts": "tsc --noEmit --skipLibCheck"
   }
 }

@@ -1,4 +1,4 @@
-import mineflayer from 'mineflayer';
+import * as mineflayer from 'mineflayer';
 
 const bot = mineflayer.createBot({
 	host: 'localhost', // minecraft server ip

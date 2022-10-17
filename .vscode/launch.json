@@ -1,0 +1,12 @@
+{
+  "configurations": [
+    {
+      "name": "Start Bot",
+      "program": "${workspaceFolder}/dist/index.js",
+      "request": "launch",
+      "skipFiles": ["<node_internals>/**"],
+      "type": "node",
+      "preLaunchTask": "tsc build"
+    }
+  ]
+}

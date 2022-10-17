@@ -1,0 +1,39 @@
+{
+  "name": "paintcraft-benchmark-bot",
+  "version": "1.0.0",
+  "description": "PaintCraftの負荷テストのため、複数のプレイヤーを自動操作して負荷をかけるためのツール",
+  "type": "module",
+  "keywords": [
+    "minecraft",
+    "bot"
+  ],
+  "author": {
+    "name": "Kamesuta",
+    "url": "https://github.com/Kamesuta"
+  },
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/"
+  ],
+  "scripts": {
+    "build": "npm run lint && tsc",
+    "lint": "eslint --ext .ts --fix src/**/*.ts",
+    "fmt": "prettier --write src/**/*.ts",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.7.18",
+    "@typescript-eslint/eslint-plugin": "^5.3.0",
+    "@typescript-eslint/parser": "^5.3.0",
+    "eslint": "^8.2.0",
+    "prettier": "^2.7.1",
+    "source-map-support": "^0.5.12",
+    "ts-node": "^10.0.0",
+    "typescript": "^4.0.3"
+  },
+  "dependencies": {
+    "mineflayer": "github:PrismarineJS/mineflayer#2c6a403"
+  }
+}

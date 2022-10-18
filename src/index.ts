@@ -5,9 +5,45 @@ import * as vec3 from "vec3";
 type Vec3 = vec3.Vec3;
 const Vec3 = vec3.default;
 
+/**
+ * パスを作成
+ * @param position アンカー
+ * @param size サイズ
+ */
+function generatePath(position: Vec3, size: Vec3): Vec3[] {
+  const path: Vec3[] = [];
+  for (let ix = 0; ix <= size.x; ix++) {
+    for (let iz = 0; iz < size.z; iz++) {
+      const i = ix % 2 === 0 ? iz + 1 : size.z - iz;
+      path.push(Vec3([ix, 0, i]).add(position));
+    }
+  }
+  if (size.x % 2 === 0) {
+    for (let iz = 0; iz < size.z - 1; iz++) {
+      const i = size.z - iz - 1;
+      path.push(Vec3([size.x, 0, i]).add(position));
+    }
+  }
+  for (let ix = 0; ix <= size.x; ix++) {
+    const i = size.x - ix;
+    path.push(Vec3([i, 0, 0]).add(position));
+  }
+  return path;
+}
+
+/** 自動操作Bot */
 class BotAgent {
+  /** ID */
+  id: number;
+
   /** Botインスタンス */
   bot: mineflayer.Bot;
+
+  /** パス */
+  path: Vec3[] | null = null;
+
+  /** 準備済み */
+  ready: Promise<void>;
 
   /**
    * BotAgentを初期化しログインする
@@ -15,10 +51,14 @@ class BotAgent {
    * @param id ID
    */
   constructor(id: number) {
+    // IDを設定
+    this.id = id;
+
     // Botを初期化してログイン
     this.bot = mineflayer.createBot({
       host: "localhost",
       username: `BotAgent${id}`,
+      version: "1.16.5",
     });
 
     // エラーやキックの理由を表示する
@@ -27,9 +67,11 @@ class BotAgent {
 
     // ナビゲートプラグインをインストール
     navigatePlugin()(this.bot);
-    // 初期位置まで移動
-    this.bot.once("spawn", () => {
-      //this.moveTo(Vec3([0, 0, 0]));
+    // 準備完了フラグ
+    this.ready = new Promise((resolve) => {
+      this.bot.once("spawn", () => {
+        resolve();
+      });
     });
   }
 
@@ -41,38 +83,212 @@ class BotAgent {
   public async moveTo(position: Vec3): Promise<void> {
     return new Promise((resolve, reject) => {
       // 一旦すべての移動を停止
-      this.bot.navigate.emit("interrupted");
-      this.bot.navigate.removeAllListeners();
-      this.bot.navigate.stop();
+      this.stop();
       // イベントリスナーを登録
-      this.bot.navigate.once("cannotFind", () => {
-        reject();
-      });
-      this.bot.navigate.once("arrived", () => {
-        resolve();
-      });
-      this.bot.navigate.once("interrupted", () => {
-        reject();
-      });
+      this.registerListener(resolve, reject);
       this.bot.navigate.to(position);
     });
   }
+
+  /**
+   * パスに沿って移動する
+   *
+   * @param path 移動パス
+   */
+  public async movePath(path: Vec3[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // 一旦すべての移動を停止
+      this.stop();
+      // イベントリスナーを登録
+      this.registerListener(resolve, reject);
+      this.bot.navigate.walk(path);
+    });
+  }
+
+  /**
+   * イベントリスナーを登録
+   * @param resolve 成功
+   * @param reject 失敗
+   */
+  private registerListener(
+    resolve: (value: void | PromiseLike<void>) => void,
+    reject: (reason?: string) => void
+  ) {
+    this.bot.navigate.once("arrived", () => resolve());
+    this.bot.navigate.once("cannotFind", (reason) =>
+      reject(`cannotFind: ${reason}`)
+    );
+    this.bot.navigate.once("interrupted", (reason) =>
+      reject(`interrupted: ${reason}`)
+    );
+    this.bot.navigate.once("obstructed", (reason) =>
+      reject(`obstructed: ${reason}`)
+    );
+  }
+
+  /**
+   * 停止する
+   */
+  public stop(): void {
+    this.bot.navigate.emit("interrupted");
+    this.bot.navigate.removeAllListeners();
+    this.bot.navigate.stop();
+  }
 }
 
+// 最初にログインするBot
 const agent = new BotAgent(0);
+// 最初と最後の位置を設定
+let position1 = Vec3([249, 64, 222]);
+let position2 = Vec3([251, 64, 224]);
+// ログインしているBot
+let bots: BotAgent[] = [];
+
+// スリープ
+const sleep = (ms: number) => new Promise<void>((res) => setTimeout(res, ms));
 
 // チャット入力時
 agent.bot.on("chat", async (username, message) => {
-  // navigate to whoever talks
+  // 自身の発言は無視
   if (username === agent.bot.username) return;
+  // 発言者のエンティティを取得
   const target = agent.bot.players[username].entity;
-  if (message === "come") {
-    //agent.bot.navigate.to(target.position);
-    await agent.moveTo(target.position).catch(() => {
-      agent.bot.chat("I can't move to you");
-    });
-    agent.bot.chat("I'm here!");
-  } else if (message === "stop") {
-    agent.bot.navigate.stop();
+
+  // チャットコマンド
+  switch (message) {
+    case "pos1":
+      // 位置1を設定
+      {
+        position1 = target.position.clone().floor();
+        agent.bot.chat(`pos1: ${position1}`);
+      }
+      break;
+
+    case "pos2":
+      // 位置2を設定
+      {
+        position2 = target.position.clone().floor();
+        agent.bot.chat(`pos2: ${position2}`);
+      }
+      break;
+
+    case "gen":
+      // パステスト
+      {
+        // パスを作成
+        agent.bot.chat(`パスを作成しています...`);
+        const minPosition = position1.min(position2);
+        const maxPosition = position1.max(position2);
+        const size = maxPosition.minus(minPosition);
+        const path = generatePath(minPosition, size);
+
+        // パスを表示
+        agent.bot.chat(`サイズ: ${size}`);
+        agent.bot.chat(`パス:`);
+        for (const p of path) {
+          agent.bot.chat(` (${p.x}, ${p.z})`);
+          await sleep(400);
+        }
+      }
+      break;
+
+    case "login":
+      // ログイン済み
+      {
+        if (bots.length > 0) {
+          agent.bot.chat("すでにログインしています");
+          return;
+        }
+
+        // パスを作成
+        agent.bot.chat(`パスを作成しています...`);
+        const minPosition = position1.min(position2);
+        const maxPosition = position1.max(position2);
+        const size = maxPosition.minus(minPosition);
+        const path = generatePath(minPosition, size);
+
+        // ログイン
+        agent.bot.chat(`ログインしています...`);
+        bots = [...Array<number>(path.length).keys()].map((i: number) => {
+          if (i === 0) return agent;
+          return new BotAgent(i);
+        });
+        await Promise.all(bots.map((bot) => bot.ready));
+        agent.bot.chat(`パスを登録中...`);
+        for (const bot of bots) {
+          const pos = path.shift();
+          if (!pos) return;
+          path.push(pos);
+          bot.path = [...path];
+
+          agent.bot.chat(` ${bot.path[0]}`);
+          await sleep(400);
+        }
+        agent.bot.chat(`初期位置まで移動しています...`);
+        // await Promise.all(
+        //   bots.map((bot) =>
+        //     bot.moveTo(path[bot.id]).catch(() => {
+        //       agent.bot.chat(`Bot${bot.id}の初期位置への移動に失敗しました`);
+        //     })
+        //   )
+        // );
+        for (const bot of bots) {
+          if (!bot.path) continue;
+          await bot.moveTo(bot.path[0]).catch((reason) => {
+            agent.bot.chat(
+              `Bot${bot.id}の初期位置への移動に失敗しました: ${reason}`
+            );
+          });
+        }
+        agent.bot.chat(`完了しました`);
+      }
+
+      break;
+
+    case "move":
+      // 移動
+      {
+        agent.bot.chat(`移動しています...`);
+        await Promise.all(
+          bots.map((bot) => bot.movePath(bot.path ? bot.path : []))
+        ).catch(() => {
+          agent.bot.chat(`移動エラー`);
+        });
+        agent.bot.chat(`完了しました`);
+      }
+
+      break;
+
+    case "logout":
+      // ログアウト
+      {
+        bots
+          .filter((bot) => bot.id !== 0)
+          .forEach((bot) => {
+            bot.stop();
+            bot.bot.quit();
+          });
+        bots = [];
+        agent.bot.chat(`ログアウトしました`);
+      }
+
+      break;
+
+    case "come":
+      // 現在の位置まで移動
+      {
+        //agent.bot.navigate.to(target.position);
+        await agent.moveTo(target.position).catch(() => {
+          agent.bot.chat("移動エラー");
+        });
+        agent.bot.chat(`移動しました`);
+      }
+      break;
+
+    case "stop":
+      {
+        agent.bot.navigate.stop();
+      }
+      break;
   }
 });

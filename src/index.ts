@@ -1,51 +1,78 @@
-import * as mineflayer from 'mineflayer';
-import navigatePlugin from 'mineflayer-navigate';
-import { Vec3 } from 'vec3';
+import * as mineflayer from "mineflayer";
+import navigatePlugin from "mineflayer-navigate";
+import * as vec3 from "vec3";
 
-const bot = mineflayer.createBot({
-	host: 'localhost', // minecraft server ip
-	username: 'bot1', // minecraft username
-	// password: '12345678' // minecraft password, comment out if you want to log into online-mode=false servers
-	// port: 25565, // only set if you need a port that isn't 25565
-	// version: false, // only set if you need a specific version or snapshot (ie: "1.8.9" or "1.16.5"), otherwise it's set automatically
-	// auth: 'mojang' // only set if you need microsoft auth, then set this to 'microsoft'
-});
+type Vec3 = vec3.Vec3;
+const Vec3 = vec3.default;
 
-// install the plugin
-navigatePlugin()(bot);
+class BotAgent {
+  /** Botインスタンス */
+  bot: mineflayer.Bot;
 
-bot.on('chat', (username, message) => {
-	if (username === bot.username) return;
-	bot.chat(message);
-});
+  /**
+   * BotAgentを初期化しログインする
+   *
+   * @param id ID
+   */
+  constructor(id: number) {
+    // Botを初期化してログイン
+    this.bot = mineflayer.createBot({
+      host: "localhost",
+      username: `BotAgent${id}`,
+    });
 
-// Log errors and kick reasons:
-bot.on('kicked', console.log);
-bot.on('error', console.log);
+    // エラーやキックの理由を表示する
+    this.bot.on("kicked", (err) => console.log(`Kicked ${id}: ${err}`));
+    this.bot.on("error", (err) => console.log(`Error ${id}: ${err}`));
 
-// optional configuration
-bot.navigate.blocksToAvoid[132] = true; // avoid tripwire
-bot.navigate.blocksToAvoid[59] = false; // ok to trample crops
-bot.navigate.on('pathFound', function (path: string) {
-	bot.chat('found path. I can get there in ' + path.length + ' moves.');
-});
-bot.navigate.on('cannotFind', function (closestPath: Vec3[]) {
-	bot.chat('unable to find path. getting as close as possible');
-	bot.navigate.walk(closestPath);
-});
-bot.navigate.on('arrived', function () {
-	bot.chat('I have arrived');
-});
-bot.navigate.on('interrupted', function () {
-	bot.chat('stopping');
-});
-bot.on('chat', function (username, message) {
-	// navigate to whoever talks
-	if (username === bot.username) return;
-	const target = bot.players[username].entity;
-	if (message === 'come') {
-		bot.navigate.to(target.position);
-	} else if (message === 'stop') {
-		bot.navigate.stop();
-	}
+    // ナビゲートプラグインをインストール
+    navigatePlugin()(this.bot);
+    // 初期位置まで移動
+    this.bot.once("spawn", () => {
+      //this.moveTo(Vec3([0, 0, 0]));
+    });
+  }
+
+  /**
+   * 場所まで移動する
+   *
+   * @param position 移動先
+   */
+  public async moveTo(position: Vec3): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // 一旦すべての移動を停止
+      this.bot.navigate.emit("interrupted");
+      this.bot.navigate.removeAllListeners();
+      this.bot.navigate.stop();
+      // イベントリスナーを登録
+      this.bot.navigate.once("cannotFind", () => {
+        reject();
+      });
+      this.bot.navigate.once("arrived", () => {
+        resolve();
+      });
+      this.bot.navigate.once("interrupted", () => {
+        reject();
+      });
+      this.bot.navigate.to(position);
+    });
+  }
+}
+
+const agent = new BotAgent(0);
+
+// チャット入力時
+agent.bot.on("chat", async (username, message) => {
+  // navigate to whoever talks
+  if (username === agent.bot.username) return;
+  const target = agent.bot.players[username].entity;
+  if (message === "come") {
+    //agent.bot.navigate.to(target.position);
+    await agent.moveTo(target.position).catch(() => {
+      agent.bot.chat("I can't move to you");
+    });
+    agent.bot.chat("I'm here!");
+  } else if (message === "stop") {
+    agent.bot.navigate.stop();
+  }
 });

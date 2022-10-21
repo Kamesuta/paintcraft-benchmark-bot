@@ -134,7 +134,7 @@ agent.bot.on("chat", async (username, message) => {
         bots
           .filter((bot) => bot.id !== 0)
           .forEach((bot) => {
-            bot.stop();
+            bot.bot.pathfinder.stop();
             bot.bot.quit();
           });
         bots = [];
@@ -156,7 +156,7 @@ agent.bot.on("chat", async (username, message) => {
 
     case "stop":
       {
-        agent.bot.navigate.stop();
+        agent.bot.pathfinder.stop();
       }
       break;
   }

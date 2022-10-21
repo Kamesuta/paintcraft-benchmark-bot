@@ -1,6 +1,8 @@
 import * as mineflayer from "mineflayer";
-import navigatePlugin from "mineflayer-navigate";
+import { pathfinder, Movements } from "mineflayer-pathfinder";
+import pathfinderModule from "mineflayer-pathfinder";
 import * as vec3 from "vec3";
+import minecraftData from "minecraft-data";
 
 type Vec3 = vec3.Vec3;
 const Vec3 = vec3.default;
@@ -15,6 +17,9 @@ export class BotAgent {
 
   /** パス */
   path: Vec3[] | null = null;
+
+  /** 移動方法 */
+  movements: Movements;
 
   /** 準備済み */
   ready: Promise<void>;
@@ -40,7 +45,10 @@ export class BotAgent {
     this.bot.on("error", (err) => console.log(`Error ${id}: ${err}`));
 
     // ナビゲートプラグインをインストール
-    navigatePlugin()(this.bot);
+    this.bot.loadPlugin(pathfinder);
+    // 移動方法を設定
+    this.movements = new Movements(this.bot, minecraftData("1.16.5"));
+    this.bot.pathfinder.setMovements(this.movements);
     // 準備完了フラグ
     this.ready = new Promise((resolve) => {
       this.bot.once("spawn", () => {
@@ -55,13 +63,10 @@ export class BotAgent {
    * @param position 移動先
    */
   public async moveTo(position: Vec3): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // 一旦すべての移動を停止
-      this.stop();
-      // イベントリスナーを登録
-      this.registerListener(resolve, reject);
-      this.bot.navigate.to(position);
-    });
+    // 移動
+    await this.bot.pathfinder.goto(
+      new pathfinderModule.goals.GoalBlock(position.x, position.y, position.z)
+    );
   }
 
   /**
@@ -70,42 +75,11 @@ export class BotAgent {
    * @param path 移動パス
    */
   public async movePath(path: Vec3[]): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // 一旦すべての移動を停止
-      this.stop();
-      // イベントリスナーを登録
-      this.registerListener(resolve, reject);
-      this.bot.navigate.walk(path);
-    });
-  }
-
-  /**
-   * イベントリスナーを登録
-   * @param resolve 成功
-   * @param reject 失敗
-   */
-  private registerListener(
-    resolve: (value: void | PromiseLike<void>) => void,
-    reject: (reason?: string) => void
-  ) {
-    this.bot.navigate.once("arrived", () => resolve());
-    this.bot.navigate.once("cannotFind", (reason) =>
-      reject(`cannotFind: ${reason}`)
-    );
-    this.bot.navigate.once("interrupted", (reason) =>
-      reject(`interrupted: ${reason}`)
-    );
-    this.bot.navigate.once("obstructed", (reason) =>
-      reject(`obstructed: ${reason}`)
-    );
-  }
-
-  /**
-   * 停止する
-   */
-  public stop(): void {
-    this.bot.navigate.emit("interrupted");
-    this.bot.navigate.removeAllListeners();
-    this.bot.navigate.stop();
+    // 移動
+    for (const position of path) {
+      await this.bot.pathfinder.goto(
+        new pathfinderModule.goals.GoalBlock(position.x, position.y, position.z)
+      );
+    }
   }
 }
